@@ -3,19 +3,12 @@
 #include<stdio.h>
 int main()
 {
-	int rc;
-	char *buf;
-	rc = syscall(548, buf, 20);
+	char buf[25], buf1[25];
+	long rc = syscall(548, buf, 20);
+	printf("buf: %s rc: %ld\n",buf,rc);
 	
-	if(rc!=-1)
-	{
-		printf("%s\n",buf);
-		printf("%d\n",rc);
-	}
-	else
-	{
-		printf("%d\n",rc);
-	}
+	long rc1 = syscall(548, buf1, 2);
+	printf("rc1 :%ld\n",rc1);
 	while(1) {}
 }
 
