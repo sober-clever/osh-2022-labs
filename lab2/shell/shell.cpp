@@ -25,13 +25,13 @@ static void handler(int sig){
   if(sig==SIGINT){
     // pid == -1 表明 waitpid 异常
     if(pid != -1){
-      std::cout<<"\n#";
+      std::cout<<"\n";
       //fflush(stdout);
       //fprintf(stderr, "#\n");
       //std::cout<<"pid != -1\n";
       return ;
     }
-    else{ // pid == -1 表示中断
+    else{ 
       write(2, "\n#", 2);
       //std::cout<<"\n#";
       //std::cout<<"pid == -1\n";
@@ -191,6 +191,7 @@ void execute(std::vector<std::string> args){
   }
 
   // 这里只有父进程（原进程）才会进入
+  // 父进程等待子进程完成
   // 如果成功，wait会返回被收集的子进程的进程ID，如果调用进程没有子进程，调用就会失败，此时wait返回-1
   int ret = wait(nullptr);
   if (ret < 0) {
