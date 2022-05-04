@@ -13,21 +13,31 @@
 // wait
 #include <sys/wait.h>
 #include <signal.h>
+#include <stdio.h>
 
 //  delimiter - n. 分隔符
 // 函数声明
 std::vector<std::string> split(std::string s, const std::string &delimiter);
 
 static void handler(int sig){
-  /*int status = 0;
+  int status;
   pid_t pid = waitpid(0, &status, WNOHANG);
   if(sig==SIGINT){
+    // pid == -1 表明 waitpid 异常
     if(pid != -1){
-      std::cout<<"\n"<<"#";
+      std::cout<<"\n#";
+      //fflush(stdout);
+      //fprintf(stderr, "#\n");
+      //std::cout<<"pid != -1\n";
       return ;
     }
-  }*/
-  std::cout<<"#";
+    else{ // pid == -1 表示中断
+      write(2, "\n#", 2);
+      //std::cout<<"\n#";
+      //std::cout<<"pid == -1\n";
+      return ;
+    }
+  }
 }
 
   
@@ -154,8 +164,10 @@ int exec_builtin(std::vector<std::string> args, std::string &cmd, std::vector<st
     return -1; //前面的都没有执行，说明是外部指令
 }
 
+// 执行外部指令
 void execute(std::vector<std::string> args){
-  pid_t pid = fork(); //创建子进程
+  // 创建子进程以执行外部命令
+  pid_t pid = fork(); 
 
   // std::vector<std::string> 转 char **
   char *arg_ptrs[args.size() + 1];
@@ -193,10 +205,9 @@ int main() {
   // 用来存储读入的一行命令
   std::string cmd;
   
-  //signal(SIGINT, handler); // 这里的handler还存在问题
+  signal(SIGINT, handler); // 这里的handler还存在问题
 
-  // repeat 用来表示当前指令是重复之前的命令（!! 或 !n） 
-  // 还是执行输入的命令
+  // repeat 用来表示当前指令是重复之前的命令（!! 或 !n），还是执行输入的命令
   bool  repeat = false;
   
   while (true) {
@@ -208,6 +219,7 @@ int main() {
 
         // 读入一行。std::getline 结果不包含换行符。
         std::getline(std::cin, cmd);
+        //getchar();
         history.push_back(cmd);
     }
     else{ //表示运行的是之前的指令（通过 !n 或者 !!）
