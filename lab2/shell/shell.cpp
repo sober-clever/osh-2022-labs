@@ -15,6 +15,9 @@
 #include <signal.h>
 #include <stdio.h>
 
+#define READ_PORT 0  //读端
+#define WRITE_PORT 1 //写端
+
 //  delimiter - n. 分隔符
 // 函数声明
 std::vector<std::string> split(std::string s, const std::string &delimiter);
@@ -32,7 +35,7 @@ static void handler(int sig){
       return ;
     }
     else{ 
-      write(2, "\n#", 2);
+      write(2, "\n\033[32mshell\033[0m#", 17);
       //std::cout<<"\n#";
       //std::cout<<"pid == -1\n";
       return ;
@@ -216,7 +219,7 @@ int main() {
     // repeat = false，表示执行的命令来自用户输入 
     if(!repeat){
         // 打印提示符
-        std::cout << "# ";
+        std::cout << "\033[32mshell\033[0m#";
 
         // 读入一行。std::getline 结果不包含换行符。
         std::getline(std::cin, cmd);
@@ -227,9 +230,9 @@ int main() {
         repeat = false;
     }
     
-    // 检查是否是管道
+    // 检查是否含有管道
     std::vector<std::string> cmds = split(cmd, "|");
-
+    //std::cout<<"cmds len:"<<cmds.size()<<"\n";
     // 单条指令 或者 空指令
     if(cmds.size() <= 1){
       // 按空格分割命令为单词
@@ -247,6 +250,62 @@ int main() {
 
       // 外部命令
       execute(args);
+    }
+    // 处理管道的情况
+    else{
+      int read_fd; //上一管道的读端口
+      int len = cmds.size();
+      // 在下面的循环中会创建 len - 1 个管道
+      // 注意，Linux 管道中的各条指令时并行的
+      for(int i = 0; i < len; i++){
+        std::string single_cmd = cmds[i]; //取出单条指令
+        //std::cout<<single_cmd<<"\n";
+        int fd[2];
+        if(i != len-1){
+          int ret = pipe(fd); //创建管道
+          if(ret == -1){
+            std::cout<<"Pipe creation failed.\n";
+            break;
+          }
+        }
+        
+        pid_t pid = fork();
+        if(pid == 0){
+          // 子进程
+          if(i < len - 1){ //除了最后一条指令，其余指令都要将结果输入到管道中
+            close(fd[READ_PORT]);
+            dup2(fd[WRITE_PORT], STDOUT_FILENO); 
+            //把标准输出重定向到管道的写端，这时进程（指令）的输出结果不会输出到屏幕上，
+            //而是会输出到管道里
+            close(fd[WRITE_PORT]);
+          }
+          if(i > 0){ // 除了第一条指令，都要从管道读取信息
+            close(fd[WRITE_PORT]);
+            dup2(fd[READ_PORT], STDIN_FILENO); 
+            //把标准输入重定向到管道的读端，这时进程（指令）的输入不会来自键盘，
+            //而是从管道的读端读取
+            close(fd[READ_PORT]);
+          }
+          std::vector<std::string> args = split(single_cmd, " ");
+          if(exec_builtin(args, cmd, history, repeat) == -1)
+            execute(args);
+          exit(255);
+        }
+
+        // 父进程
+        if(i>0) close(read_fd); // 父进程
+        if(i<len-1) read_fd = fd[READ_PORT];  //保留下前一个
+        //std::cout<<read_fd<<"\n";
+        close(fd[WRITE_PORT]); 
+        // 父进程的写端一定要关闭，否则管道会被阻塞
+        //（只有管道所有的写端口都被关闭时，管道才不会被阻塞，
+        // 否则就会阻塞直到写端有内容写入，类似于 scanf 等待用户输入）
+      }
+      // 如果该进程没有子进程，则wait函数返回 -1
+      // 如果该进程有子进程，则wait函数返回最近运行结束的子进程的id
+      // 下面的 while 循环确保了所有子进程都结束运行后，才会退出去执行下一条指令
+      // （只有 wait 返回值为 0，才能确保子进程都执行完毕）
+      while(wait(nullptr) > 0) ;
     }
   }
 }
