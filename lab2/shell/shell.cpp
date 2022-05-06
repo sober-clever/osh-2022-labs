@@ -24,51 +24,8 @@ std::vector<std::string> split(std::string s, const std::string &delimiter);
 static void handler(int sig);
 int exec_builtin(std::vector<std::string> args, std::string &cmd, std::vector<std::string> history, bool &repeat);
 void execute(std::vector<std::string> args);
-
-
-// trim from left
-void LeftTrim(std::string &s, const char *t = " \t\n\r\f\v") {//删除左边的空格
-    std::string::iterator it;
-    for(it=s.begin();it!=s.end();it++)
-    {
-        int flag = 0;
-        for(int j=0;j<5;j++)
-        {
-            if(*it==t[j])//表明*it为
-            {
-                s.erase(it);
-                it--;
-                flag = 1;
-                break;
-            }
-        }
-        if(!flag)
-            break;
-    }
-}
-
-// trim from right
-void RightTrim(std::string &s, const char *t = " \t\n\r\f\v") {//删除右边的空格
-    std::string::iterator it;
-    for(it=s.end()-1;it>=s.begin();it--)
-    {
-        int flag = 0;
-        for(int j=0;j<5;j++)
-        {
-            if(*it==t[j])//表明*it为
-            {
-                s.erase(it);
-                it++;
-                flag = 1;
-                break;
-            }
-        }
-        if(!flag)
-            break;
-
-    }
-}
-
+void LeftTrim(std::string &s, const char *t = " \t\n\r\f\v");
+void RightTrim(std::string &s, const char *t = " \t\n\r\f\v");
 
 int main() {
   // 不同步 iostream 和 cstdio 的 buffer
@@ -381,6 +338,47 @@ void execute(std::vector<std::string> args){
   }
 }
 
+// trim from left
+void LeftTrim(std::string &s, const char *t) {//删除左边的空格
+    std::string::iterator it;
+    for(it=s.begin();it!=s.end();it++)
+    {
+        int flag = 0;
+        for(int j=0;j<5;j++)
+        {
+            if(*it==t[j])//表明*it为
+            {
+                s.erase(it);
+                it--;
+                flag = 1;
+                break;
+            }
+        }
+        if(!flag)
+            break;
+    }
+}
 
+// trim from right
+void RightTrim(std::string &s, const char *t) {//删除右边的空格
+    std::string::iterator it;
+    for(it=s.end()-1;it>=s.begin();it--)
+    {
+        int flag = 0;
+        for(int j=0;j<5;j++)
+        {
+            if(*it==t[j])//表明*it为
+            {
+                s.erase(it);
+                it++;
+                flag = 1;
+                break;
+            }
+        }
+        if(!flag)
+            break;
+
+    }
+}
 
 
