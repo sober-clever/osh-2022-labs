@@ -26,6 +26,49 @@ int exec_builtin(std::vector<std::string> args, std::string &cmd, std::vector<st
 void execute(std::vector<std::string> args);
 
 
+// trim from left
+void LeftTrim(std::string &s, const char *t = " \t\n\r\f\v") {//删除左边的空格
+    std::string::iterator it;
+    for(it=s.begin();it!=s.end();it++)
+    {
+        int flag = 0;
+        for(int j=0;j<5;j++)
+        {
+            if(*it==t[j])//表明*it为
+            {
+                s.erase(it);
+                it--;
+                flag = 1;
+                break;
+            }
+        }
+        if(!flag)
+            break;
+    }
+}
+
+// trim from right
+void RightTrim(std::string &s, const char *t = " \t\n\r\f\v") {//删除右边的空格
+    std::string::iterator it;
+    for(it=s.end()-1;it>=s.begin();it--)
+    {
+        int flag = 0;
+        for(int j=0;j<5;j++)
+        {
+            if(*it==t[j])//表明*it为
+            {
+                s.erase(it);
+                it++;
+                flag = 1;
+                break;
+            }
+        }
+        if(!flag)
+            break;
+
+    }
+}
+
 
 int main() {
   // 不同步 iostream 和 cstdio 的 buffer
@@ -54,7 +97,11 @@ int main() {
     else{ //表示运行的是之前的指令（通过 !n 或者 !!）
         repeat = false;
     }
-    
+
+    std::vector<std::string> redirect_1 = split(cmd, ">");
+    std::vector<std::string> redirect_2 = split(cmd, ">>");
+    std::vector<std::string> redirect_3 = split(cmd, "<");
+
     // 检查是否含有管道
     std::vector<std::string> cmds = split(cmd, "|");
     //std::cout<<"cmds len:"<<cmds.size()<<"\n";
@@ -62,6 +109,8 @@ int main() {
     if(cmds.size() <= 1){
       // 按空格分割命令为单词
       //  ags 是所有单词组成的向量
+      LeftTrim(cmd);
+      RightTrim(cmd);
       std::vector<std::string> args = split(cmd, " ");  
 
       // 没有可处理的命令
@@ -84,6 +133,8 @@ int main() {
       // 注意，Linux 管道中的各条指令时并行的
       for(int i = 0; i < len; i++){
         std::string single_cmd = cmds[i]; //取出单条指令
+        LeftTrim(single_cmd);
+        RightTrim(single_cmd);
         //std::cout<<single_cmd<<"\n";
         int fd[2];
         if(i != len-1){
@@ -118,9 +169,10 @@ int main() {
         }
 
         // 父进程
-        if(i>0) close(read_fd); // 父进程
-        if(i<len-1) read_fd = fd[READ_PORT];  //保留下前一个
-        // std::cout<<read_fd<<"\n";
+        if(i>0) close(read_fd); // 当前子进程从前一管道的读端口读取数据后要及时把前一管道的读端口关闭
+        if(i<len-1) read_fd = fd[READ_PORT];  //保留下前一个管道读端口的文件描述符
+        //std::cout<<read_fd<<"\n";
+
         close(fd[WRITE_PORT]); 
         // 父进程的写端一定要关闭，否则管道会被阻塞
         //（只有管道所有的写端口都被关闭时，管道才不会被阻塞，
@@ -150,7 +202,6 @@ std::vector<std::string> split(std::string s, const std::string &delimiter) {
   return res;
 }
 
-
 static void handler(int sig){
   int status;
   pid_t pid = waitpid(0, &status, WNOHANG);
@@ -171,7 +222,6 @@ static void handler(int sig){
     }
   }
 }
-
   
 // 执行内建指令
 int exec_builtin(std::vector<std::string> args, std::string &cmd, std::vector<std::string> history, bool &repeat){
@@ -330,4 +380,7 @@ void execute(std::vector<std::string> args){
     std::cout << "wait failed";
   }
 }
+
+
+
 
