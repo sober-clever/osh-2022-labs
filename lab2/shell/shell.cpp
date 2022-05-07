@@ -14,6 +14,10 @@
 #include <sys/wait.h>
 #include <signal.h>
 #include <stdio.h>
+#include<sys/types.h>  /*提供类型pid_t,size_t的定义*/
+#include<sys/stat.h>
+#include<fcntl.h>
+
 
 #define READ_PORT 0  //读端
 #define WRITE_PORT 1 //写端
@@ -22,6 +26,7 @@
 // 函数声明
 std::vector<std::string> split(std::string s, const std::string &delimiter);
 static void handler(int sig);
+void redirect(std::string single_cmd, int flag, int *fd, std::vector<std::string> &args);
 int exec_builtin(std::vector<std::string> args, std::string &cmd, std::vector<std::string> history, bool &repeat);
 void execute(std::vector<std::string> args);
 void LeftTrim(std::string &s, const char *t = " \t\n\r\f\v");
@@ -55,9 +60,6 @@ int main() {
         repeat = false;
     }
 
-    std::vector<std::string> redirect_1 = split(cmd, ">");
-    std::vector<std::string> redirect_2 = split(cmd, ">>");
-    std::vector<std::string> redirect_3 = split(cmd, "<");
 
     // 检查是否含有管道
     std::vector<std::string> cmds = split(cmd, "|");
@@ -68,19 +70,44 @@ int main() {
       //  ags 是所有单词组成的向量
       LeftTrim(cmd);
       RightTrim(cmd);
-      std::vector<std::string> args = split(cmd, " ");  
+      std::vector<std::string> args = split(cmd, " ");
 
       // 没有可处理的命令
       if (args.empty()) {
         continue;
       }
+      if(args[0]=="exit" && args.size()<=1){ //提前退出
+        exit(0);
+      }
 
-      // 执行内建指令，传 cmd 和 history 以执行 !!、!n 与 history 指令
-      if(exec_builtin(args, cmd, history, repeat)!=-1)
-        continue;
+      pid_t pid = fork();
+      if(pid == 0){
+          int flag_redirect = 0;
+          if(cmd.find(">>") != std::string::npos){
+              flag_redirect = 2;
+          }
+          else if(cmd.find(">") != std::string::npos){
+              flag_redirect = 1;
+          }
+          else if(cmd.find("<") != std::string::npos){
+              flag_redirect = 3;
+          }
+          if(flag_redirect!=0){ //处理重定向
+            int fd[2];
+            fd[WRITE_PORT] = STDOUT_FILENO;
+            fd[READ_PORT] = STDIN_FILENO;
+            redirect(cmd, flag_redirect, fd, args);
+          }
+            
 
-      // 外部命令
-      execute(args);
+          // 执行内建指令，传 cmd 和 history 以执行 !!、!n 与 history 指令
+          if(exec_builtin(args, cmd, history, repeat)!=-1)
+            continue;
+          // 外部命令
+          execute(args);
+          exit(255);
+      }
+      while(wait(nullptr) > 0) ;
     }
     // 处理管道的情况
     else{
@@ -92,6 +119,8 @@ int main() {
         std::string single_cmd = cmds[i]; //取出单条指令
         LeftTrim(single_cmd);
         RightTrim(single_cmd);
+        std::vector<std::string> args = split(single_cmd, " ");
+
         //std::cout<<single_cmd<<"\n";
         int fd[2];
         if(i != len-1){
@@ -104,22 +133,55 @@ int main() {
         
         pid_t pid = fork();
         if(pid == 0){
+          int flag_redirect = 0;
+          if(single_cmd.find(">>") != std::string::npos){
+              flag_redirect = 2;
+          }
+          else if(single_cmd.find(">") != std::string::npos){
+              flag_redirect = 1;
+          }
+          else if(single_cmd.find("<") != std::string::npos){
+              flag_redirect = 3;
+          }
+
           // 子进程
           if(i < len - 1){ //除了最后一条指令，其余指令都要将结果输入到管道中
             close(fd[READ_PORT]);
-            dup2(fd[WRITE_PORT], STDOUT_FILENO); 
+            if(flag_redirect!=1 || flag_redirect!=2) //不将输出重定向写入文件
             //把标准输出重定向到管道的写端，这时进程（指令）的输出结果不会输出到屏幕上，
-            //而是会输出到管道里
+            //而是会输出到管道里       
+              dup2(fd[WRITE_PORT], STDOUT_FILENO);
+            if(flag_redirect){
+              int fd1[2];
+              fd1[WRITE_PORT] = STDOUT_FILENO;
+              fd1[READ_PORT] = STDIN_FILENO;
+              redirect(single_cmd, flag_redirect, fd1, args);
+            }
+          
             close(fd[WRITE_PORT]);
           }
           if(i > 0){ // 除了第一条指令，都要从管道读取信息
-            close(fd[WRITE_PORT]);
-            dup2(read_fd, STDIN_FILENO); 
+
             //把标准输入重定向到上一个子进程和父进程通信管道的读端，读取上一条指令的输出结果
             //这时进程（指令）的输入不会来自键盘，而是从管道的读端读取
+            close(fd[WRITE_PORT]);
+            if(flag_redirect!=3){//输入不重定向自文件
+              dup2(read_fd, STDIN_FILENO);
+            }
+            if(flag_redirect){
+              int fd1[2];
+              fd1[WRITE_PORT] = STDOUT_FILENO;
+              fd1[READ_PORT] = STDIN_FILENO;
+              redirect(single_cmd, flag_redirect, fd1, args);
+            }
             close(fd[READ_PORT]);
           }
-          std::vector<std::string> args = split(single_cmd, " ");
+
+          //int cnt_redirect = 0;
+          
+          //if(flag_redirect){ // 有重定向
+            //redirect(single_cmd, flag_redirect, fd, args);
+          //}
           if(exec_builtin(args, cmd, history, repeat) == -1)
             execute(args);
           exit(255);
@@ -179,7 +241,58 @@ static void handler(int sig){
     }
   }
 }
-  
+
+void redirect(std::string single_cmd, int flag, int *fd, std::vector<std::string> &args){
+  int pos;
+  if(flag==1){ // ">" 将输出结果写入文件（覆盖）
+    pos = single_cmd.find(">");
+    std::string file_name = single_cmd.substr(pos+1);
+    //std::cout<<file_name<<"\n";
+    LeftTrim(file_name);
+    RightTrim(file_name);
+    int file_fd = open(file_name.c_str(), O_WRONLY|O_CREAT|O_TRUNC);
+    if(file_fd < 0){
+      std::cout<<"open "<<file_name<<" error\n";
+      return ;
+    }
+    //close(fd[READ_PORT]);
+    dup2(file_fd, fd[WRITE_PORT]);
+    close(file_fd);
+    //close(fd[WRITE_PORT]);
+    //fd[WRITE_PORT] = file_fd;
+  }
+  else if(flag==2){ // ">>" 写入不覆盖
+    pos = single_cmd.find(">>");
+    std::string file_name = single_cmd.substr(pos+2);
+    LeftTrim(file_name);
+    RightTrim(file_name);
+    int file_fd = open(file_name.c_str(), O_WRONLY|O_CREAT|O_APPEND);
+    if(file_fd < 0){
+      std::cout<<"open "<<file_name<<" error\n";
+      return ;
+    }
+    dup2(file_fd, fd[WRITE_PORT]);
+    close(file_fd);
+  }
+  else if(flag==3){
+    pos = single_cmd.find("<");
+    std::string file_name = single_cmd.substr(pos+1);
+    LeftTrim(file_name);
+    RightTrim(file_name);
+    int file_fd = open(file_name.c_str(), O_RDONLY);
+    if(file_fd < 0){
+      std::cout<<"open "<<file_name<<" error\n";
+      return ;
+    }
+    dup2(file_fd, fd[READ_PORT]);
+    close(file_fd);
+  }
+  std::string pure_cmd = single_cmd.substr(0, pos);
+  LeftTrim(pure_cmd);
+  RightTrim(pure_cmd);
+  args = split(pure_cmd, " ");
+}
+
 // 执行内建指令
 int exec_builtin(std::vector<std::string> args, std::string &cmd, std::vector<std::string> history, bool &repeat){
   // 更改工作目录为目标目录
