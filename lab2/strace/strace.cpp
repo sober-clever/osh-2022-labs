@@ -32,7 +32,10 @@ int main(int argc, char *argv[]){
             ptrace(PTRACE_SYSCALL, pid, 0, 0); 
             
             // 该函数执行结束后子进程停在系统调用的入口
-            waitpid(pid, 0, 0);
+            waitpid(pid, &status, 0);
+            if(WIFEXITED(status)) { // 如果子进程退出了, 那么终止跟踪
+                break;
+            }
 
             struct user_regs_struct regs;
 
@@ -48,11 +51,13 @@ int main(int argc, char *argv[]){
             ptrace(PTRACE_SYSCALL, pid, 0, 0);
         
             // 该函数执行结束后子进程停在系统调用的出口
-            waitpid(pid, 0, 0);
+            waitpid(pid, &status, 0);
 
             ptrace(PTRACE_GETREGS, pid, 0, &regs);
             fprintf(stderr, " = %ld\n", (long)regs.rax);
-            if(syscall==231) exit(0);
+            if(WIFEXITED(status)) { // 如果子进程退出了, 那么终止跟踪
+                break;
+            }
         }
     }
 
