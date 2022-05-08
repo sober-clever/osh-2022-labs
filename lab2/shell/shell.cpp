@@ -26,7 +26,7 @@
 // 函数声明
 std::vector<std::string> split(std::string s, const std::string &delimiter);
 static void handler(int sig);
-void redirect(std::string single_cmd, int flag, int *fd, std::vector<std::string> &args);
+std::string redirect(std::string single_cmd, int flag, int *fd, std::vector<std::string> &args);
 int exec_builtin(std::vector<std::string> args, std::string &cmd, std::vector<std::string> history, bool &repeat);
 void execute(std::vector<std::string> args);
 void LeftTrim(std::string &s, const char *t = " \t\n\r\f\v");
@@ -49,8 +49,11 @@ int main() {
     // repeat = false，表示执行的命令来自用户输入 
     if(!repeat){
         // 打印提示符
-        std::cout << "\033[32mshell\033[0m#";
 
+        //std::cout << "\033[32mshell\033[0m#";
+        std::string cwd;
+        const char *ret = getcwd(&cwd[0], PATH_MAX);
+        std::cout << "\033[32mshell\033[0m:\033[34m" << ret << "\033[0m$:";
         // 读入一行。std::getline 结果不包含换行符。
         std::getline(std::cin, cmd);
         //getchar();
@@ -71,43 +74,83 @@ int main() {
       LeftTrim(cmd);
       RightTrim(cmd);
       std::vector<std::string> args = split(cmd, " ");
+      std::string pure_cmd;
 
       // 没有可处理的命令
       if (args.empty()) {
         continue;
       }
-      if(args[0]=="exit" && args.size()<=1){ //提前退出
+
+      if(args[0]=="exit"&&args.size()==1){
         exit(0);
+      }
+
+      int flag_redirect = 0;
+      if(cmd.find(">>") != std::string::npos){
+          std::string pure_cmd = cmd.substr(0, cmd.find(">>"));
+          flag_redirect = 2;
+      }
+      else if(cmd.find(">") != std::string::npos){
+        std::string pure_cmd = cmd.substr(0, cmd.find("<"));
+        flag_redirect = 1;
+      }
+      else if(cmd.find("<") != std::string::npos){
+        std::string pure_cmd = cmd.substr(0, cmd.find(">"));
+        flag_redirect = 3;
+      }
+      
+      if(flag_redirect) args = split(pure_cmd, " "); //处理重定向
+
+      //!n 指令
+      if(args[0][0] == '!' && args[0]!="!!"){
+          int n = atoi(args[0].substr(1).c_str()); // 获得n
+          if(0 < n && n <= history.size()){
+              cmd = history[n-1];
+              //std::cout<<cmd<<"\n";
+              repeat = true;
+          }
+          else{
+              std::cout<<"bash: !"<<n<<": event not found"<<"\n";
+              continue;
+          }
+      }
+
+      // !! 指令
+      if(args[0] == "!!" && args.size()==1){
+          int index = history.size()-2;
+          while(history[index] == "!!" && index>=0){
+              index--;
+          }
+          if(index>=0){
+              cmd = history[index];
+              //std::cout<<cmd<<"\n";
+              repeat = true;
+          }
       }
 
       pid_t pid = fork();
       if(pid == 0){
-          int flag_redirect = 0;
-          if(cmd.find(">>") != std::string::npos){
-              flag_redirect = 2;
-          }
-          else if(cmd.find(">") != std::string::npos){
-              flag_redirect = 1;
-          }
-          else if(cmd.find("<") != std::string::npos){
-              flag_redirect = 3;
-          }
+          
           if(flag_redirect!=0){ //处理重定向
             int fd[2];
             fd[WRITE_PORT] = STDOUT_FILENO;
             fd[READ_PORT] = STDIN_FILENO;
-            redirect(cmd, flag_redirect, fd, args);
+            pure_cmd = redirect(cmd, flag_redirect, fd, args);
           }
-            
-
+          else
+            pure_cmd = cmd;
+          //std::cout << pure_cmd << "\n";
           // 执行内建指令，传 cmd 和 history 以执行 !!、!n 与 history 指令
-          if(exec_builtin(args, cmd, history, repeat)!=-1)
-            continue;
+          if(exec_builtin(args, pure_cmd, history, repeat)!=-1){
+            exit(255);
+          }
+          //std::cout<<pure_cmd<<"\n";
           // 外部命令
           execute(args);
           exit(255);
       }
       while(wait(nullptr) > 0) ;
+      
     }
     // 处理管道的情况
     else{
@@ -233,8 +276,11 @@ static void handler(int sig){
       //std::cout<<"pid != -1\n";
       return ;
     }
-    else{ 
-      write(2, "\n\033[32mshell\033[0m#", 17);
+    else{
+      std::string cwd;
+      const char *ret = getcwd(&cwd[0], PATH_MAX);
+      fprintf(stderr, "\n\033[32mshell\033[0m:\033[34m%s\033[0m$:", ret);
+      //write(2, "\n\033[32mshell\033[0m#", 17);
       //std::cout<<"\n#";
       //std::cout<<"pid == -1\n";
       return ;
@@ -242,21 +288,22 @@ static void handler(int sig){
   }
 }
 
-void redirect(std::string single_cmd, int flag, int *fd, std::vector<std::string> &args){
+std::string redirect(std::string single_cmd, int flag, int *fd, std::vector<std::string> &args){
   int pos;
+  //std::cout<<flag<<"\n";
   if(flag==1){ // ">" 将输出结果写入文件（覆盖）
     pos = single_cmd.find(">");
     std::string file_name = single_cmd.substr(pos+1);
     //std::cout<<file_name<<"\n";
     LeftTrim(file_name);
     RightTrim(file_name);
-    int file_fd = open(file_name.c_str(), O_WRONLY|O_CREAT|O_TRUNC);
+    int file_fd = open(file_name.c_str(), O_WRONLY|O_CREAT|O_TRUNC, 0666);
     if(file_fd < 0){
       std::cout<<"open "<<file_name<<" error\n";
-      return ;
+      return "";
     }
     //close(fd[READ_PORT]);
-    dup2(file_fd, fd[WRITE_PORT]);
+    dup2(file_fd, STDOUT_FILENO);
     close(file_fd);
     //close(fd[WRITE_PORT]);
     //fd[WRITE_PORT] = file_fd;
@@ -266,12 +313,12 @@ void redirect(std::string single_cmd, int flag, int *fd, std::vector<std::string
     std::string file_name = single_cmd.substr(pos+2);
     LeftTrim(file_name);
     RightTrim(file_name);
-    int file_fd = open(file_name.c_str(), O_WRONLY|O_CREAT|O_APPEND);
+    int file_fd = open(file_name.c_str(), O_WRONLY|O_CREAT|O_APPEND, 0666);
     if(file_fd < 0){
       std::cout<<"open "<<file_name<<" error\n";
-      return ;
+      return "";
     }
-    dup2(file_fd, fd[WRITE_PORT]);
+    dup2(file_fd, STDOUT_FILENO);
     close(file_fd);
   }
   else if(flag==3){
@@ -282,15 +329,16 @@ void redirect(std::string single_cmd, int flag, int *fd, std::vector<std::string
     int file_fd = open(file_name.c_str(), O_RDONLY);
     if(file_fd < 0){
       std::cout<<"open "<<file_name<<" error\n";
-      return ;
+      return "";
     }
-    dup2(file_fd, fd[READ_PORT]);
+    dup2(file_fd, STDIN_FILENO);
     close(file_fd);
   }
   std::string pure_cmd = single_cmd.substr(0, pos);
   LeftTrim(pure_cmd);
   RightTrim(pure_cmd);
   args = split(pure_cmd, " ");
+  return pure_cmd;
 }
 
 // 执行内建指令
@@ -390,7 +438,7 @@ int exec_builtin(std::vector<std::string> args, std::string &cmd, std::vector<st
         int n = atoi(args[0].substr(1).c_str()); // 获得n
         if(0 < n && n <= history.size()){
             cmd = history[n-1];
-            std::cout<<cmd<<"\n";
+            //std::cout<<cmd<<"\n";
             repeat = true;
         }
         else{
@@ -407,7 +455,7 @@ int exec_builtin(std::vector<std::string> args, std::string &cmd, std::vector<st
         }
         if(index>=0){
             cmd = history[index];
-            std::cout<<cmd<<"\n";
+            //std::cout<<cmd<<"\n";
             repeat = true;
         }
         return 1;
@@ -445,10 +493,7 @@ void execute(std::vector<std::string> args){
   // 这里只有父进程（原进程）才会进入
   // 父进程等待子进程完成
   // 如果成功，wait会返回被收集的子进程的进程ID，如果调用进程没有子进程，调用就会失败，此时wait返回-1
-  int ret = wait(nullptr);
-  if (ret < 0) {
-    std::cout << "wait failed";
-  }
+  while(wait(nullptr)>0);
 }
 
 // trim from left
