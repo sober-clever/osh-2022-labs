@@ -18,7 +18,7 @@
 #include<sys/stat.h>
 #include<fcntl.h>
 #include<fstream>
-
+#include<stdlib.h>
 
 #define READ_PORT 0  //读端
 #define WRITE_PORT 1 //写端
@@ -421,7 +421,28 @@ std::string redirect(std::string single_cmd, int flag, int *fd, std::vector<std:
 
 // 执行内建指令
 int exec_builtin(std::vector<std::string> args, std::string &cmd, /*std::vector<std::string> history,*/ bool &repeat){
-  // 更改工作目录为目标目录
+   // 更改工作目录为目标目录
+
+    if(args[0] == "echo" && (args.size()>1 && args[1][0]=='$')){
+      for(int i=1; i<args.size(); i++){
+        if(args[i][0]=='$'){//获取环境变量的值
+          std::string env = args[i].substr(1);
+          LeftTrim(env);
+          RightTrim(env);
+          char *value = getenv(env.c_str());
+          if(value!=NULL){
+            std::string env_value = value;
+            std::cout<<env_value;
+          }
+        }
+        else {
+          std::cout<<args[i];  
+        }
+        if(i!=args.size()-1) std::cout<<" ";
+        else std::cout<<"\n";
+      }
+      return 1;
+    }
 
     // 显示当前工作目录
     if (args[0] == "pwd") {
@@ -560,6 +581,7 @@ int exec_builtin(std::vector<std::string> args, std::string &cmd, /*std::vector<
 
     return -1; //前面的都没有执行，说明是外部指令
 }
+ 
 
 // 执行外部指令
 void execute(std::vector<std::string> args){
