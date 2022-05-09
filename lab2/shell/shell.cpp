@@ -17,6 +17,7 @@
 #include<sys/types.h>  /*提供类型pid_t,size_t的定义*/
 #include<sys/stat.h>
 #include<fcntl.h>
+#include<fstream>
 
 
 #define READ_PORT 0  //读端
@@ -27,16 +28,30 @@
 std::vector<std::string> split(std::string s, const std::string &delimiter);
 static void handler(int sig);
 std::string redirect(std::string single_cmd, int flag, int *fd, std::vector<std::string> &args);
-int exec_builtin(std::vector<std::string> args, std::string &cmd, std::vector<std::string> history, bool &repeat);
+int exec_builtin(std::vector<std::string> args, std::string &cmd, bool &repeat);
 void execute(std::vector<std::string> args);
 void LeftTrim(std::string &s, const char *t = " \t\n\r\f\v");
 void RightTrim(std::string &s, const char *t = " \t\n\r\f\v");
 
+int total_his=0;
 int main() {
   // 不同步 iostream 和 cstdio 的 buffer
   std::ios::sync_with_stdio(false);
-  std::vector<std::string> history;
+  //std::vector<std::string> history;
   // 用来存储读入的一行命令
+
+  std::ofstream history_test;
+  history_test.open("shell.history",std::ios::out|std::ios::app); //如果没有该文件则会创建该文件
+  history_test.close();
+  
+  std::ifstream history_fin;
+  history_fin.open("shell.history", std::ios::in);
+  char tmp[40];
+  while (history_fin.getline(tmp, 40)){
+    total_his++; //统计总行数
+  }
+  history_fin.close();
+
   std::string cmd;
   
   signal(SIGINT, handler); // 这里的handler还存在问题
@@ -57,7 +72,12 @@ int main() {
         // 读入一行。std::getline 结果不包含换行符。
         std::getline(std::cin, cmd);
         //getchar();
-        history.push_back(cmd);
+        std::ofstream history_fout;
+        history_fout.open("shell.history",std::ios::out|std::ios::app);        
+        history_fout<<total_his+1<<" "<<cmd<<"\n";
+        total_his++;
+        history_fout.close();
+        //history.push_back(cmd);
     }
     else{ //表示运行的是之前的指令（通过 !n 或者 !!）
         repeat = false;
@@ -85,6 +105,23 @@ int main() {
         exit(0);
       }
 
+      if (args[0] == "cd") {
+        if (args.size() <= 1) {
+          // 输出的信息尽量为英文，非英文输出（其实是非 ASCII 输出）在没有特别配置的情况下（特别是 Windows 下）会乱码
+          // 如感兴趣可以自行搜索 GBK Unicode UTF-8 Codepage UTF-16 等进行学习
+          std::cout << "Insufficient arguments\n";
+          // 不要用 std::endl，std::endl = "\n" + fflush(stdout)
+          return 1;
+        }
+
+        // 调用系统 API
+        int ret = chdir(args[1].c_str());
+        if (ret < 0) {
+          std::cout << "cd failed\n";
+        }
+        continue;
+      }
+
       int flag_redirect = 0;
       if(cmd.find(">>") != std::string::npos){
           std::string pure_cmd = cmd.substr(0, cmd.find(">>"));
@@ -104,9 +141,18 @@ int main() {
       //!n 指令
       if(args[0][0] == '!' && args[0]!="!!"){
           int n = atoi(args[0].substr(1).c_str()); // 获得n
-          if(0 < n && n <= history.size()){
-              cmd = history[n-1];
-              //std::cout<<cmd<<"\n";
+          if(1 <= n && /*n <= history.size()*/n<=total_his){
+             std::ifstream history_fin;
+              history_fin.open("shell.history", std::ios::in);
+              char tmp[40];
+              for(int i=1; i<n; i++){
+                history_fin.getline(tmp, 40);
+              }
+              history_fin.getline(tmp, 40);
+              history_fin.close();
+              cmd = tmp;
+              cmd = cmd.substr(cmd.find(" "));
+              LeftTrim(cmd);
               repeat = true;
           }
           else{
@@ -117,7 +163,7 @@ int main() {
 
       // !! 指令
       if(args[0] == "!!" && args.size()==1){
-          int index = history.size()-2;
+         /* int index = history.size()-2;
           while(history[index] == "!!" && index>=0){
               index--;
           }
@@ -125,7 +171,21 @@ int main() {
               cmd = history[index];
               //std::cout<<cmd<<"\n";
               repeat = true;
+          }*/
+          std::ifstream history_fin;
+          history_fin.open("shell.history", std::ios::in);
+          char tmp[40];
+          for(int i=1; i<total_his-1; i++){
+            history_fin.getline(tmp, 40);
           }
+          history_fin.getline(tmp, 40);
+          history_fin.close();
+          cmd = tmp;
+          cmd = cmd.substr(cmd.find(" "));
+          LeftTrim(cmd);
+          repeat = true;
+          //std::cout<<cmd<<"\n";
+          continue;
       }
 
       pid_t pid = fork();
@@ -141,7 +201,7 @@ int main() {
             pure_cmd = cmd;
           //std::cout << pure_cmd << "\n";
           // 执行内建指令，传 cmd 和 history 以执行 !!、!n 与 history 指令
-          if(exec_builtin(args, pure_cmd, history, repeat)!=-1){
+          if(exec_builtin(args, pure_cmd, /*history,*/ repeat)!=-1){
             exit(255);
           }
           //std::cout<<pure_cmd<<"\n";
@@ -225,7 +285,7 @@ int main() {
           //if(flag_redirect){ // 有重定向
             //redirect(single_cmd, flag_redirect, fd, args);
           //}
-          if(exec_builtin(args, cmd, history, repeat) == -1)
+          if(exec_builtin(args, cmd, /*history,*/ repeat) == -1)
             execute(args);
           exit(255);
         }
@@ -259,7 +319,7 @@ std::vector<std::string> split(std::string s, const std::string &delimiter) {
     token = s.substr(0, pos);
     res.push_back(token);
     s = s.substr(pos + delimiter.length());
-  }
+  } 
   res.push_back(s);
   return res;
 }
@@ -342,24 +402,8 @@ std::string redirect(std::string single_cmd, int flag, int *fd, std::vector<std:
 }
 
 // 执行内建指令
-int exec_builtin(std::vector<std::string> args, std::string &cmd, std::vector<std::string> history, bool &repeat){
+int exec_builtin(std::vector<std::string> args, std::string &cmd, /*std::vector<std::string> history,*/ bool &repeat){
   // 更改工作目录为目标目录
-    if (args[0] == "cd") {
-      if (args.size() <= 1) {
-        // 输出的信息尽量为英文，非英文输出（其实是非 ASCII 输出）在没有特别配置的情况下（特别是 Windows 下）会乱码
-        // 如感兴趣可以自行搜索 GBK Unicode UTF-8 Codepage UTF-16 等进行学习
-        std::cout << "Insufficient arguments\n";
-        // 不要用 std::endl，std::endl = "\n" + fflush(stdout)
-        return 1;
-      }
-
-      // 调用系统 API
-      int ret = chdir(args[1].c_str());
-      if (ret < 0) {
-        std::cout << "cd failed\n";
-      }
-      return 1;
-    }
 
     // 显示当前工作目录
     if (args[0] == "pwd") {
@@ -427,39 +471,74 @@ int exec_builtin(std::vector<std::string> args, std::string &cmd, std::vector<st
     // history n指令
     if(args[0] == "history" && args.size() > 1){
         int n = atoi(args[1].c_str());
-        for(auto i = 0; i < history.size() && i < n; i++){
-            std::cout<<i+1<<" "<<history[i]<<"\n";
+        std::ifstream history_fin;
+        history_fin.open("shell.history", std::ios::in);
+        int start_line = total_his - n + 1;
+        if(start_line<=0) start_line = 1;
+        char tmp[40];
+        for(int i=1; i<start_line; i++){
+          history_fin.getline(tmp, 40);
         }
+        for(int i=start_line; i<=total_his; i++){
+          history_fin.getline(tmp, 40);
+          std::cout<<tmp<<"\n";
+        }
+        history_fin.close();
+        /*for(auto i = 0; i < history.size() && i < n; i++){
+            std::cout<<i+1<<" "<<history[i]<<"\n";
+        }*/
         return 1;
     }
 
     //!n 指令
-    if(args[0][0] == '!' && args[0]!="!!"){
-        int n = atoi(args[0].substr(1).c_str()); // 获得n
-        if(0 < n && n <= history.size()){
-            cmd = history[n-1];
-            //std::cout<<cmd<<"\n";
-            repeat = true;
-        }
-        else{
-            std::cout<<"bash: !"<<n<<": event not found"<<"\n";
-        }
-        return 1;
-    }
+      if(args[0][0] == '!' && args[0]!="!!"){
+          int n = atoi(args[0].substr(1).c_str()); // 获得n
+          if(1 <= n && /*n <= history.size()*/n<=total_his){
+             std::ifstream history_fin;
+              history_fin.open("shell.history", std::ios::in);
+              char tmp[40];
+              for(int i=1; i<n; i++){
+                history_fin.getline(tmp, 40);
+              }
+              history_fin.getline(tmp, 40);
+              history_fin.close();
+              cmd = tmp;
+              cmd = cmd.substr(cmd.find(" "));
+              LeftTrim(cmd);
+              repeat = true;
+          }
+          else{
+              std::cout<<"bash: !"<<n<<": event not found"<<"\n";
+          }
+          return 1;
+      }
 
-    // !! 指令
-    if(args[0] == "!!" && args.size()==1){
-        int index = history.size()-2;
-        while(history[index] == "!!" && index>=0){
-            index--;
-        }
-        if(index>=0){
-            cmd = history[index];
-            //std::cout<<cmd<<"\n";
-            repeat = true;
-        }
-        return 1;
-    }
+      // !! 指令
+      if(args[0] == "!!" && args.size()==1){
+         /* int index = history.size()-2;
+          while(history[index] == "!!" && index>=0){
+              index--;
+          }
+          if(index>=0){
+              cmd = history[index];
+              //std::cout<<cmd<<"\n";
+              repeat = true;
+          }*/
+          std::ifstream history_fin;
+          history_fin.open("shell.history", std::ios::in);
+          char tmp[40];
+          for(int i=1; i<total_his-1; i++){
+            history_fin.getline(tmp, 40);
+          }
+          history_fin.getline(tmp, 40);
+          history_fin.close();
+          cmd = tmp;
+          cmd = cmd.substr(cmd.find(" "));
+          LeftTrim(cmd);
+          repeat = true;
+          //std::cout<<cmd<<"\n";
+          return 1;
+      }
 
     return -1; //前面的都没有执行，说明是外部指令
 }
