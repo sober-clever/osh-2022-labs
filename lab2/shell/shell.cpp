@@ -34,6 +34,8 @@ void LeftTrim(std::string &s, const char *t = " \t\n\r\f\v");
 void RightTrim(std::string &s, const char *t = " \t\n\r\f\v");
 
 int total_his=0;
+char *histo_dir;
+std::string history_dir;
 int main() {
   // 不同步 iostream 和 cstdio 的 buffer
   std::ios::sync_with_stdio(false);
@@ -41,11 +43,15 @@ int main() {
   // 用来存储读入的一行命令
 
   std::ofstream history_test;
-  history_test.open("shell.history",std::ios::out|std::ios::app); //如果没有该文件则会创建该文件
+  histo_dir = getcwd(&histo_dir[0], PATH_MAX);
+  history_dir = histo_dir;
+  history_dir += "/shell.history";
+  //std::cout<<history_dir<<"\n";
+  history_test.open(history_dir.c_str(),std::ios::out|std::ios::app); //如果没有该文件则会创建该文件
   history_test.close();
   
   std::ifstream history_fin;
-  history_fin.open("shell.history", std::ios::in);
+  history_fin.open(history_dir.c_str(), std::ios::in);
   char tmp[40];
   while (history_fin.getline(tmp, 40)){
     total_his++; //统计总行数
@@ -73,7 +79,7 @@ int main() {
         std::getline(std::cin, cmd);
         //getchar();
         std::ofstream history_fout;
-        history_fout.open("shell.history",std::ios::out|std::ios::app);        
+        history_fout.open(history_dir.c_str(),std::ios::out|std::ios::app);        
         history_fout<<total_his+1<<" "<<cmd<<"\n";
         total_his++;
         history_fout.close();
@@ -143,7 +149,7 @@ int main() {
           int n = atoi(args[0].substr(1).c_str()); // 获得n
           if(1 <= n && /*n <= history.size()*/n<=total_his){
              std::ifstream history_fin;
-              history_fin.open("shell.history", std::ios::in);
+              history_fin.open(history_dir.c_str(), std::ios::in);
               char tmp[40];
               for(int i=1; i<n; i++){
                 history_fin.getline(tmp, 40);
@@ -173,7 +179,7 @@ int main() {
               repeat = true;
           }*/
           std::ifstream history_fin;
-          history_fin.open("shell.history", std::ios::in);
+          history_fin.open(history_dir.c_str(), std::ios::in);
           char tmp[40];
           for(int i=1; i<total_his-1; i++){
             history_fin.getline(tmp, 40);
@@ -472,7 +478,7 @@ int exec_builtin(std::vector<std::string> args, std::string &cmd, /*std::vector<
     if(args[0] == "history" && args.size() > 1){
         int n = atoi(args[1].c_str());
         std::ifstream history_fin;
-        history_fin.open("shell.history", std::ios::in);
+        history_fin.open(history_dir.c_str(), std::ios::in);
         int start_line = total_his - n + 1;
         if(start_line<=0) start_line = 1;
         char tmp[40];
@@ -495,7 +501,7 @@ int exec_builtin(std::vector<std::string> args, std::string &cmd, /*std::vector<
           int n = atoi(args[0].substr(1).c_str()); // 获得n
           if(1 <= n && /*n <= history.size()*/n<=total_his){
              std::ifstream history_fin;
-              history_fin.open("shell.history", std::ios::in);
+              history_fin.open(history_dir.c_str(), std::ios::in);
               char tmp[40];
               for(int i=1; i<n; i++){
                 history_fin.getline(tmp, 40);
@@ -525,7 +531,7 @@ int exec_builtin(std::vector<std::string> args, std::string &cmd, /*std::vector<
               repeat = true;
           }*/
           std::ifstream history_fin;
-          history_fin.open("shell.history", std::ios::in);
+          history_fin.open(history_dir.c_str(), std::ios::in);
           char tmp[40];
           for(int i=1; i<total_his-1; i++){
             history_fin.getline(tmp, 40);
