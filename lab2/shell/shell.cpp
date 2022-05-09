@@ -68,16 +68,28 @@ int main() {
   while (true) {
 
     // repeat = false，表示执行的命令来自用户输入 
+    while(wait(nullptr) > 0) ;
     if(!repeat){
         // 打印提示符
 
         //std::cout << "\033[32mshell\033[0m#";
         std::string cwd;
         const char *ret = getcwd(&cwd[0], PATH_MAX);
-        std::cout << "\033[32mshell\033[0m:\033[34m" << ret << "\033[0m$:";
+        std::cout << "\033[1;32mshell\033[0;37m:\033[1;34m" << ret << "\033[0;37m$ ";
         // 读入一行。std::getline 结果不包含换行符。
         std::getline(std::cin, cmd);
-        //getchar();
+        if(cmd.length()==0) return 0;
+        //cmd = "";
+        /*char ch;
+        std::cin.get(ch);
+        if(ch==0){ // 读到 EOF
+          return 0;
+        }
+        while(ch!='\n'){
+          cmd += ch;
+          std::cin.get(ch);
+        }*/
+        //std::cout<<cmd<<"\n";
         std::ofstream history_fout;
         history_fout.open(history_dir.c_str(),std::ios::out|std::ios::app);        
         history_fout<<total_his+1<<" "<<cmd<<"\n";
@@ -345,7 +357,7 @@ static void handler(int sig){
     else{
       std::string cwd;
       const char *ret = getcwd(&cwd[0], PATH_MAX);
-      fprintf(stderr, "\n\033[32mshell\033[0m:\033[34m%s\033[0m$:", ret);
+      fprintf(stderr, "\n\033[1;32mshell\033[0;37m:\033[1;34m%s\033[0;37m$ ", ret);
       //write(2, "\n\033[32mshell\033[0m#", 17);
       //std::cout<<"\n#";
       //std::cout<<"pid == -1\n";
