@@ -30,7 +30,7 @@ void *handle_chat(void *data) {
                 }
                 prev = i + 1;
                 single_message[k+1]='\0';
-                printf("%s", single_message);
+                //printf("%s", single_message);
                 send(pipe->fd_recv, single_message, k, 0);
             }
             
