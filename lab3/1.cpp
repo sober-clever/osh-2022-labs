@@ -5,6 +5,8 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <pthread.h>
+#include <queue>
+#include <string>
 
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
 int num_of_clients = 0; // 用于存储连接的客户端数量
@@ -15,7 +17,12 @@ struct Pipe {
     int fd;
     int num; // 用于记录自身的编号
     //int fd_recv; // 可以向至多 31 个套接字发送消息
+    std::queue<std::string> send_q; // 存下每个客户端的消息队列
 }clients[35];
+
+
+
+// char* send_map[35][35]; // 存下客户端 i 往客户端 j 发送的消息
 
 
 void *handle_chat(void *data) {
@@ -30,7 +37,7 @@ void *handle_chat(void *data) {
     //send_fd = pipe->num;
     while ((len = recv(pipe->fd, buffer, 1000, 0)) > 0) {
         //printf("Sockect %d sending the length %ld\n", pipe->fd, len);
-        pthread_mutex_lock(&mutex);
+        //pthread_mutex_lock(&mutex);
         prev = 0;
         for(int i = 0; i < len; i++){
             if(buffer[i]=='\n'){
@@ -42,22 +49,50 @@ void *handle_chat(void *data) {
                 prev = i + 1;
                 single_message[k]='\0';
                 //printf("%s", single_message);
-                
+                std::string me = single_message;
+                pthread_mutex_lock(&mutex);
                 for(int n=0; n<32; n++){
+                     // n 为要发送的目标， num 为发送消息的节点
+
                     // 不能发给自己，不能发给空闲的节点
                     if(n==num || !in_use[n]) continue;
-                    send(clients[n].fd, single_message, k, 0);
+
+                    // 将消息加入目标节点的消息队列
+                    
+                    clients[n].send_q.push(me);
+                    
+                    //send(clients[n].fd, single_message, k, 0);
                 }
+                pthread_mutex_unlock(&mutex);
                 //send(pipe->fd_recv, single_message, k, 0);
-                
             }
         }
-        pthread_mutex_unlock(&mutex);
+
     }
     in_use[num] = 0;
     num_of_clients--;
     printf("Client %d exited.\n", num);
     return NULL;
+}
+
+
+void *send_handle(void *data){
+    struct Pipe* pipe = (struct Pipe *) data;
+    int num = pipe->num;
+    while(1){
+        
+        while(!clients[num].send_q.empty()){
+
+            pthread_mutex_lock(&mutex);
+            //struct Message me = send_q[num].front();
+            std::string me = clients[num].send_q.front();
+            pthread_mutex_unlock(&mutex);
+
+            clients[num].send_q.pop();
+            send(pipe->fd, me.c_str(), me.length(), 0);
+        }
+        
+    }
 }
 
 int main(int argc, char **argv) {
@@ -76,7 +111,7 @@ int main(int argc, char **argv) {
     addr.sin_addr.s_addr = INADDR_ANY;
     addr.sin_port = htons(port);
     socklen_t addr_len = sizeof(addr);
-    
+
     // 将该套接字与地址绑定，把地址族中的地址赋给套接字
     if (bind(fd, (struct sockaddr *)&addr, sizeof(addr))) {
         perror("bind");
@@ -111,6 +146,8 @@ int main(int argc, char **argv) {
         num_of_clients++;
         pthread_t cli_thread;
         pthread_create(&cli_thread, NULL, handle_chat, (void *)&clients[j]);
+        pthread_t cli_send;
+        pthread_create(&cli_send, NULL, send_handle, (void *)&clients[j]);
     }
 
 
