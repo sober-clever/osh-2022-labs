@@ -94,6 +94,7 @@ void *send_handle(void *data){
     struct Pipe* pipe = (struct Pipe *) data;
     int num = pipe->num;
     while(1){
+        if(!in_use[num]) break;
         char test[] = "1";
         //int ret = send(pipe->fd, test, 0, 0);
         //if(ret<=0) break;
