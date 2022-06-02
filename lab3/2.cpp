@@ -82,10 +82,10 @@ int main(int argc, char **argv) {
                                 }
                             }
                         }
-                        if(prev==0){
+                        if(buffer[len-1] != '\n'){//后面还有一部分没有发送
                             char single_message[1024] = "Message: ";
                             int s = 9;
-                            for(int l=0; l<len; l++){
+                            for(int l=prev; l<len; l++){
                                 single_message[s] = buffer[l];
                                 s++;
                             }

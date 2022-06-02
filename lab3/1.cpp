@@ -61,10 +61,10 @@ void *handle_chat(void *data) {
                 //send(pipe->fd_recv, single_message, k, 0);
             }
         }
-        if(prev==0){ //说明 buffer 中没有换行符
+        if(buffer[len-1]!='\n'){ //说明 buffer 中没有换行符
             int k = 9;
             std::string me;
-            for(int i=0; i < len; i++){
+            for(int i=prev; i < len; i++){
                 single_message[k] = buffer[i];
                 k++;
             }
