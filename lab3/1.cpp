@@ -20,11 +20,6 @@ struct Pipe {
     std::queue<std::string> send_q; // 存下每个客户端的消息队列
 }clients[35];
 
-
-
-// char* send_map[35][35]; // 存下客户端 i 往客户端 j 发送的消息
-
-
 void *handle_chat(void *data) {
     
     struct Pipe *pipe = (struct Pipe *)data;
@@ -33,7 +28,7 @@ void *handle_chat(void *data) {
     ssize_t len;
     int prev=0;
     int num = pipe->num;
-    printf("Client %d is using.\n", num);
+    // printf("Client %d is using.\n", num);
     //send_fd = pipe->num;
     while ((len = recv(pipe->fd, buffer, 1000, 0)) > 0) {
         //printf("Sockect %d sending the length %ld\n", pipe->fd, len);
@@ -84,11 +79,11 @@ void *send_handle(void *data){
         while(!clients[num].send_q.empty()){
 
             pthread_mutex_lock(&mutex);
-            //struct Message me = send_q[num].front();
-            std::string me = clients[num].send_q.front();
-            pthread_mutex_unlock(&mutex);
 
+            std::string me = clients[num].send_q.front();
             clients[num].send_q.pop();
+            pthread_mutex_unlock(&mutex);
+            
             send(pipe->fd, me.c_str(), me.length(), 0);
         }
         
@@ -131,7 +126,7 @@ int main(int argc, char **argv) {
             perror("accept");
             return 1;
         }
-
+        
         // 寻找可用的编号
         int j; 
         for(j=0; j<32; j++){

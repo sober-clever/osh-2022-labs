@@ -51,20 +51,20 @@ int main(int argc, char **argv) {
             }
         }
         
-        if (select(fdm+1, &clients, NULL, NULL, NULL) > 0) { // 找出可以读的套接字
+        if (select(fdm+1, &clients, NULL, NULL, NULL) > 0) { // 找出接收到信号的套接字
             int flag = -1;
             char buffer[1024] = "";
             for(int i=0; i<32; i++){
                 if(!in_use[i]) continue;
                 if(FD_ISSET(fd[i], &clients)){ //说明fd[i]收到了消息
-                    printf("%d accepts new message.\n", fd[i]);
+                    //printf("%d accepts new message.\n", fd[i]);
                     ssize_t len = recv(fd[i], buffer, 1000, 0);
-                    if(len <=0 ){
+                    if(len <=0 ){ // 表明该 fd 退出
                         flag = i;
                         break;
                     }
                     do{
-                        printf("%ld\n", len);
+                        //printf("%ld\n", len);
                         int prev = 0;
                         for(int k=0; k<len; k++){
                             if(buffer[k] == '\n'){
@@ -91,7 +91,7 @@ int main(int argc, char **argv) {
                 num_of_clients--;
                 //break;
             }
-            if(FD_ISSET(fd_server, &clients)){ //接收客户端的连接
+            if(FD_ISSET(fd_server, &clients)){ //表明接收到客户端的连接
                 int fd1 = accept(fd_server, NULL, NULL);
                 if(fd1 == -1){
                     perror("accept");
@@ -106,12 +106,11 @@ int main(int argc, char **argv) {
                 }
                 if(i < 32){ //聊天室未满
                     fd[i] = fd1;
-                    printf("num: %d\n",i);
+                    //printf("num: %d\n",i);
                     in_use[i] = 1;
                     //FD_SET(fd1, &clients);
                 }   
             }
-            
         } 
         else {
             break;
