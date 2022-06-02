@@ -51,7 +51,7 @@ int main(int argc, char **argv) {
             }
         }
         
-        if (select(fdm+1, &clients, NULL, NULL, NULL) > 0) { // 找出接收到信号的套接字
+        if (select(fdm+1, &clients, NULL, NULL, NULL) > 0) { // 找出可以读的套接字
             int flag = -1;
             char buffer[1024] = "";
             for(int i=0; i<32; i++){
@@ -59,7 +59,7 @@ int main(int argc, char **argv) {
                 if(FD_ISSET(fd[i], &clients)){ //说明fd[i]收到了消息
                     //printf("%d accepts new message.\n", fd[i]);
                     ssize_t len = recv(fd[i], buffer, 1000, 0);
-                    if(len <=0 ){ // 表明该 fd 退出
+                    if(len <=0 ){
                         flag = i;
                         break;
                     }
@@ -82,6 +82,19 @@ int main(int argc, char **argv) {
                                 }
                             }
                         }
+                        if(prev==0){
+                            char single_message[1024] = "Message: ";
+                            int s = 9;
+                            for(int l=0; l<len; l++){
+                                single_message[s] = buffer[l];
+                                s++;
+                            }
+                            single_message[s] = '\0';
+                            for(int j=0; j<32; j++){
+                                    if(i==j || !in_use[j]) continue;
+                                    send(fd[j], single_message, s, 0);
+                            }
+                        }
                     }while( (len = recv(fd[i], buffer, 1000, 0)) > 0 );
                 }
             }
@@ -91,7 +104,7 @@ int main(int argc, char **argv) {
                 num_of_clients--;
                 //break;
             }
-            if(FD_ISSET(fd_server, &clients)){ //表明接收到客户端的连接
+            if(FD_ISSET(fd_server, &clients)){ //接收客户端的连接
                 int fd1 = accept(fd_server, NULL, NULL);
                 if(fd1 == -1){
                     perror("accept");
@@ -111,6 +124,7 @@ int main(int argc, char **argv) {
                     //FD_SET(fd1, &clients);
                 }   
             }
+            
         } 
         else {
             break;

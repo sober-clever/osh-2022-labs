@@ -53,7 +53,6 @@ void *handle_chat(void *data) {
                     if(n==num || !in_use[n]) continue;
 
                     // 将消息加入目标节点的消息队列
-                    
                     clients[n].send_q.push(me);
                     
                     //send(clients[n].fd, single_message, k, 0);
@@ -62,7 +61,27 @@ void *handle_chat(void *data) {
                 //send(pipe->fd_recv, single_message, k, 0);
             }
         }
+        if(prev==0){ //说明 buffer 中没有换行符
+            int k = 9;
+            std::string me;
+            for(int i=0; i < len; i++){
+                single_message[k] = buffer[i];
+                k++;
+            }
+            single_message[k] = '\0';
+            me = single_message;
+            pthread_mutex_lock(&mutex);
+            for(int n=0; n<32; n++){
+                    // n 为要发送的目标， num 为发送消息的节点
 
+                // 不能发给自己，不能发给空闲的节点
+                if(n==num || !in_use[n]) continue;
+
+                // 将消息加入目标节点的消息队列
+                clients[n].send_q.push(me);
+                pthread_mutex_unlock(&mutex);
+            }
+        }
     }
     in_use[num] = 0;
     num_of_clients--;
@@ -75,7 +94,9 @@ void *send_handle(void *data){
     struct Pipe* pipe = (struct Pipe *) data;
     int num = pipe->num;
     while(1){
-        
+        char test[] = "1";
+        //int ret = send(pipe->fd, test, 0, 0);
+        //if(ret<=0) break;
         while(!clients[num].send_q.empty()){
 
             pthread_mutex_lock(&mutex);
@@ -83,11 +104,12 @@ void *send_handle(void *data){
             std::string me = clients[num].send_q.front();
             clients[num].send_q.pop();
             pthread_mutex_unlock(&mutex);
-            
+
             send(pipe->fd, me.c_str(), me.length(), 0);
         }
-        
     }
+    //printf("Client %d exited.\n", num);
+    return NULL;
 }
 
 int main(int argc, char **argv) {
